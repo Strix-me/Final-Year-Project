@@ -1,0 +1,23 @@
+# Virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VSCode
+.vscode/
+
+# Data (raw large datasets)
+data/raw/
+
+# OS
+.DS_Store
+Thumbs.db
+
+Implementation/phishing-nb-detector/data/raw/
+Implementation/phishing-nb-detector/datasets/
+*.zip
+
+Implementation/phishing-nb-detector/data/processed/
