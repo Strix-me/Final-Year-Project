@@ -6,3 +6,4 @@ numpy
 joblib
 matplotlib
 python-multipart
+imbalanced-learn
