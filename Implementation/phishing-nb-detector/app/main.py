@@ -10,16 +10,13 @@ MODEL_PATH = ROOT / "models" / "phishing_nb.joblib"
 REPORTS_DIR = ROOT / "reports"
 METRICS_PATH = REPORTS_DIR / "metrics.json"
 
-STUDENT_NAME = "Abdur-Rahman Salami"
-MATRIC_NUMBER = "YOUR MATRIC NUMBER"
+STUDENT_NAME = "Abulrazaq Femi-Sunmonu"
+MATRIC_NUMBER = "22120612985"
 GRAD_YEAR = "2026"
 PROJECT_TITLE = "Naïve Bayes-Based Phishing Email Detection System"
 
 app = FastAPI(title=PROJECT_TITLE)
-
-vectorizer = None
-classifier = None
-threshold = 0.75
+model = None
 
 app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR)), name="reports")
 
@@ -33,14 +30,10 @@ def load_metrics():
 
 @app.on_event("startup")
 def startup():
-    global vectorizer, classifier, threshold
+    global model
     if not MODEL_PATH.exists():
         raise RuntimeError("Model not found. Train first: python src/train.py")
-
-    bundle = joblib.load(MODEL_PATH)
-    vectorizer = bundle["vectorizer"]
-    classifier = bundle["classifier"]
-    threshold = bundle.get("threshold", 0.75)
+    model = joblib.load(MODEL_PATH)
 
 
 def fmt_pct(x: float) -> str:
@@ -68,28 +61,28 @@ def home():
         <div class="grid">
           <div class="card">
             <div class="kpi-title">Accuracy</div>
-            <div class="kpi">{fmt_pct(metrics.get("accuracy", 0.0))}</div>
-            <div class="muted">Overall proportion of correctly classified emails.</div>
+            <div class="kpi">{fmt_pct(metrics.get("accuracy_mean", 0.0))}</div>
+            <div class="muted">Mean accuracy across folds.</div>
           </div>
           <div class="card">
             <div class="kpi-title">Precision</div>
-            <div class="kpi">{fmt_pct(metrics.get("precision", 0.0))}</div>
-            <div class="muted">How often a phishing prediction is actually phishing.</div>
+            <div class="kpi">{fmt_pct(metrics.get("precision_mean", 0.0))}</div>
+            <div class="muted">Mean precision across folds.</div>
           </div>
           <div class="card">
             <div class="kpi-title">Recall</div>
-            <div class="kpi">{fmt_pct(metrics.get("recall", 0.0))}</div>
-            <div class="muted">How many real phishing emails the model successfully detects.</div>
+            <div class="kpi">{fmt_pct(metrics.get("recall_mean", 0.0))}</div>
+            <div class="muted">Mean recall across folds.</div>
           </div>
           <div class="card">
             <div class="kpi-title">F1 Score</div>
-            <div class="kpi">{fmt_pct(metrics.get("f1", 0.0))}</div>
-            <div class="muted">Balanced measure of precision and recall.</div>
+            <div class="kpi">{fmt_pct(metrics.get("f1_mean", 0.0))}</div>
+            <div class="muted">Mean F1-score across folds.</div>
           </div>
           <div class="card">
             <div class="kpi-title">ROC-AUC</div>
-            <div class="kpi">{metrics.get("roc_auc", 0.0):.4f}</div>
-            <div class="muted">How well the model separates phishing from legitimate emails.</div>
+            <div class="kpi">{metrics.get("roc_auc_mean", 0.0):.4f}</div>
+            <div class="muted">Mean ROC-AUC across folds.</div>
           </div>
         </div>
         """
@@ -114,9 +107,7 @@ def home():
   --border: rgba(255,255,255,0.12);
   --text: rgba(255,255,255,0.92);
   --muted: rgba(255,255,255,0.65);
-  --accent: #6ee7ff;
 }}
-
 body {{
   margin: 0;
   font-family: Arial, sans-serif;
@@ -125,60 +116,52 @@ body {{
               var(--bg);
   color: var(--text);
 }}
-
 .wrap {{
   max-width: 1100px;
   margin: auto;
   padding: 30px 20px 50px;
 }}
-
 .header {{
   text-align: center;
   margin-bottom: 28px;
 }}
-
-.header h1 {{
-  margin-bottom: 8px;
-}}
-
 .sub {{
   color: var(--muted);
   font-size: 14px;
 }}
-
 .card {{
   border: 1px solid var(--border);
   background: var(--card);
   border-radius: 16px;
   padding: 18px;
   margin-top: 16px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.20);
 }}
-
 .grid {{
   display: grid;
   gap: 15px;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }}
-
+.chart-grid {{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 20px;
+  margin-top: 15px;
+}}
 .kpi-title {{
   font-size: 13px;
   color: var(--muted);
 }}
-
 .kpi {{
   font-size: 24px;
   font-weight: bold;
   margin-top: 6px;
 }}
-
 .muted {{
   color: var(--muted);
   font-size: 13px;
   margin-top: 8px;
   line-height: 1.35;
 }}
-
 textarea {{
   width: 100%;
   height: 190px;
@@ -191,18 +174,11 @@ textarea {{
   outline: none;
   box-sizing: border-box;
 }}
-
-textarea:focus {{
-  border-color: rgba(110,231,255,0.5);
-  box-shadow: 0 0 0 3px rgba(110,231,255,0.12);
-}}
-
 .btn-row {{
   display: flex;
   justify-content: center;
   margin-top: 15px;
 }}
-
 button {{
   padding: 11px 28px;
   border-radius: 10px;
@@ -212,43 +188,27 @@ button {{
   font-weight: bold;
   cursor: pointer;
 }}
-
 button:hover {{
   background: rgba(110,231,255,0.32);
 }}
-
 img {{
   width: 100%;
   border-radius: 10px;
   margin-top: 10px;
   border: 1px solid var(--border);
 }}
-
 .section-title {{
   margin-top: 30px;
   margin-bottom: 8px;
 }}
-
-.model-pill {{
-  display: inline-block;
-  margin-top: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 12px;
-}}
 </style>
 </head>
-
 <body>
 <div class="wrap">
-
   <div class="header">
     <h1>{PROJECT_TITLE}</h1>
     <div class="sub"><b>{STUDENT_NAME}</b> | Matric: {MATRIC_NUMBER} | Class of {GRAD_YEAR}</div>
-    <div class="model-pill">Model: TF-IDF + Multinomial Naïve Bayes + SMOTE</div>
+    <div class="sub">Model: TF-IDF + Multinomial Naïve Bayes + SMOTE + 5-Fold Stratified CV</div>
   </div>
 
   <div class="card">
@@ -266,25 +226,19 @@ img {{
   {metrics_html}
 
   <h3 class="section-title">Evaluation Visualizations</h3>
-
-<div class="chart-grid">
-
-  <div class="card">
-    <h4>Confusion Matrix</h4>
-    <div class="muted">
-      Shows correct vs incorrect classifications for phishing and legitimate emails.
+  <div class="chart-grid">
+    <div class="card">
+      <h4>Confusion Matrix</h4>
+      <div class="muted">Shows correct vs incorrect classifications.</div>
+      <img src="/reports/confusion_matrix.png" alt="Confusion Matrix">
     </div>
-    <img src="/reports/confusion_matrix.png" alt="Confusion Matrix">
-  </div>
 
-  <div class="card">
-    <h4>ROC Curve</h4>
-    <div class="muted">
-      Displays the trade-off between True Positive Rate and False Positive Rate.
+    <div class="card">
+      <h4>ROC Curve</h4>
+      <div class="muted">Shows the model’s discrimination ability.</div>
+      <img src="/reports/roc_curve.png" alt="ROC Curve">
     </div>
-    <img src="/reports/roc_curve.png" alt="ROC Curve">
   </div>
-
 </div>
 </body>
 </html>
@@ -295,9 +249,8 @@ img {{
 def predict(text: str = Form(...)):
     text = text.strip()
 
-    X_input = vectorizer.transform([text])
-    proba = float(classifier.predict_proba(X_input)[0][1])
-    pred = 1 if proba >= threshold else 0
+    proba = float(model.predict_proba([text])[0][1])
+    pred = int(model.predict([text])[0])
 
     label = "PHISHING" if pred == 1 else "LEGITIMATE"
     explanation = interpret(proba)
@@ -318,13 +271,6 @@ body {{
   font-family: Arial, sans-serif;
   margin: 0;
 }}
-
-.chart-grid {{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-top: 15px;
-}}
 .wrap {{
   max-width: 900px;
   margin: auto;
@@ -337,7 +283,6 @@ body {{
   border-radius: 14px;
   margin-top: 16px;
 }}
-
 .badge {{
   display: inline-block;
   padding: 8px 14px;
@@ -385,7 +330,6 @@ a {{
     <p><b>Phishing Probability:</b> {proba:.4f} ({fmt_pct(proba)})</p>
     <div class="bar-wrap"><div class="bar"></div></div>
     <p class="muted"><b>Interpretation:</b> {explanation}</p>
-    <p class="muted"><b>Decision Threshold:</b> {threshold:.2f}</p>
   </div>
 
   <div class="card">

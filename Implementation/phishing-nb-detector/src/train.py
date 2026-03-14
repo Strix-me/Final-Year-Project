@@ -5,19 +5,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.model_selection import StratifiedKFold, cross_validate, cross_val_predict
 from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
     confusion_matrix,
-    roc_auc_score,
     RocCurveDisplay
 )
 from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline
 
 # Project root
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,64 +39,85 @@ def main():
     X = df["text"]
     y = df["label"]
 
-    # 70/30 split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=0.30,
-        random_state=42,
-        stratify=y
+    # 5-Fold Stratified Cross-Validation
+    k = 5
+    skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+
+    # Pipeline: TF-IDF -> SMOTE -> Naive Bayes
+    pipeline = Pipeline([
+        ("tfidf", TfidfVectorizer(
+            lowercase=True,
+            stop_words="english",
+            ngram_range=(1, 2),
+            max_features=20000,
+            min_df=2,
+            max_df=0.90,
+            sublinear_tf=True
+        )),
+        ("smote", SMOTE(random_state=42)),
+        ("nb", MultinomialNB(alpha=0.5))
+    ])
+
+    scoring = {
+        "accuracy": "accuracy",
+        "precision": "precision",
+        "recall": "recall",
+        "f1": "f1",
+        "roc_auc": "roc_auc"
+    }
+
+    cv_results = cross_validate(
+        pipeline,
+        X,
+        y,
+        cv=skf,
+        scoring=scoring,
+        n_jobs=-1,
+        return_train_score=False
     )
-
-    print("\nTraining set size:", X_train.shape[0])
-    print("Testing set size:", X_test.shape[0])
-
-    vectorizer = TfidfVectorizer(
-        lowercase=True,
-        stop_words="english",
-        ngram_range=(1, 2),
-        max_features=20000,
-        min_df=2,
-        max_df=0.90,
-        sublinear_tf=True
-    )
-
-    X_train_vec = vectorizer.fit_transform(X_train)
-    X_test_vec = vectorizer.transform(X_test)
-
-    print("\nBefore SMOTE:")
-    print(pd.Series(y_train).value_counts())
-
-    smote = SMOTE(random_state=42)
-    X_train_smote, y_train_smote = smote.fit_resample(X_train_vec, y_train)
-
-    print("\nAfter SMOTE:")
-    print(pd.Series(y_train_smote).value_counts())
-
-    classifier = MultinomialNB(alpha=0.5)
-    classifier.fit(X_train_smote, y_train_smote)
-
-    threshold = 0.75
-    y_proba = classifier.predict_proba(X_test_vec)[:, 1]
-    y_pred = (y_proba >= threshold).astype(int)
 
     metrics = {
-        "accuracy": float(accuracy_score(y_test, y_pred)),
-        "precision": float(precision_score(y_test, y_pred, zero_division=0)),
-        "recall": float(recall_score(y_test, y_pred, zero_division=0)),
-        "f1": float(f1_score(y_test, y_pred, zero_division=0)),
-        "roc_auc": float(roc_auc_score(y_test, y_proba)),
-        "threshold": threshold,
-        "train_test_split": "70/30",
-        "sampling": "SMOTE on training set only"
+        "accuracy_mean": float(np.mean(cv_results["test_accuracy"])),
+        "accuracy_std": float(np.std(cv_results["test_accuracy"])),
+        "precision_mean": float(np.mean(cv_results["test_precision"])),
+        "precision_std": float(np.std(cv_results["test_precision"])),
+        "recall_mean": float(np.mean(cv_results["test_recall"])),
+        "recall_std": float(np.std(cv_results["test_recall"])),
+        "f1_mean": float(np.mean(cv_results["test_f1"])),
+        "f1_std": float(np.std(cv_results["test_f1"])),
+        "roc_auc_mean": float(np.mean(cv_results["test_roc_auc"])),
+        "roc_auc_std": float(np.std(cv_results["test_roc_auc"])),
+        "validation_method": f"{k}-Fold Stratified Cross-Validation",
+        "sampling": "SMOTE inside each training fold"
     }
 
     with open(REPORTS_DIR / "metrics.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
 
-    cm = confusion_matrix(y_test, y_pred)
+    # Cross-validated predictions for plots
+    y_pred = cross_val_predict(
+        pipeline,
+        X,
+        y,
+        cv=skf,
+        method="predict",
+        n_jobs=-1
+    )
+
+    y_proba = cross_val_predict(
+        pipeline,
+        X,
+        y,
+        cv=skf,
+        method="predict_proba",
+        n_jobs=-1
+    )[:, 1]
+
+    # Confusion Matrix
+    cm = confusion_matrix(y, y_pred)
     plt.figure()
     plt.imshow(cm)
-    plt.title("Confusion Matrix")
+    plt.title("Confusion Matrix (Cross-Validated)")
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
     plt.xticks([0, 1], ["Legit", "Phish"])
@@ -113,24 +130,23 @@ def main():
     plt.savefig(REPORTS_DIR / "confusion_matrix.png", dpi=200)
     plt.close()
 
+    # ROC Curve
     plt.figure()
-    RocCurveDisplay.from_predictions(y_test, y_proba)
-    plt.title("ROC Curve")
+    RocCurveDisplay.from_predictions(y, y_proba)
+    plt.title("ROC Curve (Cross-Validated)")
     plt.tight_layout()
     plt.savefig(REPORTS_DIR / "roc_curve.png", dpi=200)
     plt.close()
 
-    # Save plain objects, not a custom class
-    bundle = {
-        "vectorizer": vectorizer,
-        "classifier": classifier,
-        "threshold": threshold
-    }
-    joblib.dump(bundle, MODEL_PATH)
+    # Train final model on full dataset
+    pipeline.fit(X, y)
+    joblib.dump(pipeline, MODEL_PATH)
 
-    print("\n✅ Model trained successfully with SMOTE and 70/30 split!")
+    print(f"\n✅ {k}-Fold cross-validation completed successfully!")
     print("✅ Saved model:", MODEL_PATH)
-    print("✅ Metrics:", metrics)
+    print("✅ Metrics:")
+    for key, value in metrics.items():
+        print(f"   {key}: {value}")
 
 
 if __name__ == "__main__":
