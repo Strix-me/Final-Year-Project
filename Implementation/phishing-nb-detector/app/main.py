@@ -10,10 +10,13 @@ MODEL_PATH = ROOT / "models" / "phishing_nb.joblib"
 REPORTS_DIR = ROOT / "reports"
 METRICS_PATH = REPORTS_DIR / "metrics.json"
 
-STUDENT_NAME = "Abulrazaq Femi-Sunmonu"
+STUDENT_NAME = "Abdulrazaq Femi-Sunmonu"
 MATRIC_NUMBER = "22120612985"
 GRAD_YEAR = "2026"
 PROJECT_TITLE = "Naïve Bayes-Based Phishing Email Detection System"
+
+# Precision-focused threshold
+THRESHOLD = 0.85
 
 app = FastAPI(title=PROJECT_TITLE)
 model = None
@@ -59,31 +62,45 @@ def home():
     if metrics:
         metrics_html = f"""
         <div class="grid">
+
           <div class="card">
             <div class="kpi-title">Accuracy</div>
-            <div class="kpi">{fmt_pct(metrics.get("accuracy_mean", 0.0))}</div>
-            <div class="muted">Mean accuracy across folds.</div>
+            <div class="kpi">{fmt_pct(metrics.get("accuracy", 0.0))}</div>
+            <div class="muted">Overall correctness of predictions.</div>
           </div>
+
           <div class="card">
             <div class="kpi-title">Precision</div>
-            <div class="kpi">{fmt_pct(metrics.get("precision_mean", 0.0))}</div>
-            <div class="muted">Mean precision across folds.</div>
+            <div class="kpi">{fmt_pct(metrics.get("precision", 0.0))}</div>
+            <div class="muted">When flagged as phishing, how often it is correct.</div>
           </div>
+
           <div class="card">
             <div class="kpi-title">Recall</div>
-            <div class="kpi">{fmt_pct(metrics.get("recall_mean", 0.0))}</div>
-            <div class="muted">Mean recall across folds.</div>
+            <div class="kpi">{fmt_pct(metrics.get("recall", 0.0))}</div>
+            <div class="muted">Ability to detect actual phishing emails.</div>
           </div>
+
           <div class="card">
             <div class="kpi-title">F1 Score</div>
-            <div class="kpi">{fmt_pct(metrics.get("f1_mean", 0.0))}</div>
-            <div class="muted">Mean F1-score across folds.</div>
+            <div class="kpi">{fmt_pct(metrics.get("f1", 0.0))}</div>
+            <div class="muted">Balance between precision and recall.</div>
           </div>
+
           <div class="card">
             <div class="kpi-title">ROC-AUC</div>
-            <div class="kpi">{metrics.get("roc_auc_mean", 0.0):.4f}</div>
-            <div class="muted">Mean ROC-AUC across folds.</div>
+            <div class="kpi">{metrics.get("roc_auc", 0.0):.4f}</div>
+            <div class="muted">Model’s ability to distinguish phishing vs legitimate.</div>
           </div>
+
+        <!--
+        <div class="card">
+          <div class="kpi-title">Threshold</div>
+          <div class="kpi" style="color:#6ee7ff;">{metrics.get("threshold", THRESHOLD):.2f}</div>
+          <div class="muted">Decision threshold used for classification.</div>
+        </div>
+        -->
+
         </div>
         """
     else:
@@ -209,6 +226,7 @@ img {{
     <h1>{PROJECT_TITLE}</h1>
     <div class="sub"><b>{STUDENT_NAME}</b> | Matric: {MATRIC_NUMBER} | Class of {GRAD_YEAR}</div>
     <div class="sub">Model: TF-IDF + Multinomial Naïve Bayes + SMOTE + 5-Fold Stratified CV</div>
+    <div class="sub">Precision-focused threshold: {THRESHOLD:.2f}</div>
   </div>
 
   <div class="card">
@@ -250,7 +268,7 @@ def predict(text: str = Form(...)):
     text = text.strip()
 
     proba = float(model.predict_proba([text])[0][1])
-    pred = int(model.predict([text])[0])
+    pred = 1 if proba >= THRESHOLD else 0
 
     label = "PHISHING" if pred == 1 else "LEGITIMATE"
     explanation = interpret(proba)
@@ -330,6 +348,7 @@ a {{
     <p><b>Phishing Probability:</b> {proba:.4f} ({fmt_pct(proba)})</p>
     <div class="bar-wrap"><div class="bar"></div></div>
     <p class="muted"><b>Interpretation:</b> {explanation}</p>
+    <p class="muted"><b>Decision Threshold:</b> {THRESHOLD:.2f}</p>
   </div>
 
   <div class="card">

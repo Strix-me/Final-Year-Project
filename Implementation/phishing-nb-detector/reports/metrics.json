@@ -1,14 +1,10 @@
 {
-  "accuracy_mean": 0.9769522504761585,
-  "accuracy_std": 0.0005723324467190526,
-  "precision_mean": 0.7601102721971437,
-  "precision_std": 0.005049500726300629,
-  "recall_mean": 0.9803162642419256,
-  "recall_std": 0.0019642262458500885,
-  "f1_mean": 0.8562702335079869,
-  "f1_std": 0.002998263210668395,
-  "roc_auc_mean": 0.9969360517795263,
-  "roc_auc_std": 4.635975488444853e-05,
+  "accuracy": 0.986119557590136,
+  "precision": 0.906712172923777,
+  "recall": 0.8937322549089781,
+  "f1": 0.9001754259486219,
+  "roc_auc": 0.9970514453542312,
+  "threshold": 0.85,
   "validation_method": "5-Fold Stratified Cross-Validation",
   "sampling": "SMOTE inside each training fold"
 }
